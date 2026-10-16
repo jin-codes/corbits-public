@@ -1,5 +1,7 @@
 # Corbits
 
+**English** | [한국어](README.ko.md)
+
 An autonomous browser agent that does not take its own word for it. You submit a goal; Corbits
 plans, acts in a sandboxed browser, **pauses for your approval before anything consequential**, and
 reports success only after code checks the real page against completion criteria. See
@@ -384,9 +386,9 @@ Hand it over privately; they paste it on the sign-in page.
   is billed to the TypeSafe key in `.env`. It is on whenever the key is set; remove the key to run on the main model alone.
   - Jev only proposes a click. It goes through the same policy engine, approvals and limits as any other
     action, so Jev never decides what is allowed, and it is never used for approvals or permissions.
-  - On the dashboard's new-task form you can pick the Jev mode per task (server default, Jev-first, assist, or off);
+  - On the dashboard's new-task form you can pick the Jev mode per task (server default, Jev-first, Jev only, or Jev + summary);
     the choice is stored with the task and kept when a failed task is continued. It does nothing without a Jev key.
-  - **Jev only** (per task, dashboard or `jevMode: "only"`): no Claude call at all (no planning, no step, no summary). Jev takes its best-supported answer whatever its confidence (no threshold; risky controls are still never offered and every action still goes through the policy engine and approvals), and the task stops when Jev cannot continue (nothing fits, a value that is not in the goal must be typed). The request must carry `completionCriteria` (the API answers 400 otherwise) and the goal should name a start address. Verification stays deterministic code. Not measured yet. **Jev + summary** (`jevMode: "summary"`) is the same, plus one tool-less Claude call (`CORBITS_SUMMARY_MODEL` if set, else the main model) that writes only the final summary, for research tasks. The dashboard offers four choices: server default, Jev-first, Jev only, Jev + summary (the API still accepts `assist` and `off`).
+  - **Jev only** (per task, dashboard or `jevMode: "only"`): no Claude call at all (no planning, no step, no summary). Jev takes its best-supported answer whatever its confidence (no threshold; risky controls are still never offered and every action still goes through the policy engine and approvals), and the task stops when Jev cannot continue (nothing fits, a value that is not in the goal must be typed). The task needs completion criteria, either in the request (`completionCriteria`) or as a phrase in quotes in the goal (the API answers 400 with neither), and the goal should name a start address. Verification stays deterministic code. Not measured yet. **Jev + summary** (`jevMode: "summary"`) is the same, plus one tool-less Claude call (`CORBITS_SUMMARY_MODEL` if set, else the main model) that writes only the final summary, for research tasks. The dashboard offers four choices: server default, Jev-first, Jev only, Jev + summary (the API still accepts `assist`).
   - The default mode is `first` (since 2026-10-11): Jev decides the browser steps and acts at confidence >= 0.6 (never
     configurable below 0.6); the main model plans, finishes, writes text and takes risky or unclear steps. Set
     `CORBITS_JEV_MODE=assist` for the description in this list, where it acts at confidence >= 0.75 (configurable). Below that, on "none", on a Jev error or
