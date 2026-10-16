@@ -1,22 +1,103 @@
 # Corbits
 
-Autonomous browser-agent platform. Submit a goal; Corbits plans, acts in a controlled browser,
-pauses for human approval before consequential actions, and reports success only after an
-independent check of the real page state. See [CLAUDE.md](CLAUDE.md) for the design rules.
+An autonomous browser agent that does not take its own word for it. You submit a goal; Corbits
+plans, acts in a sandboxed browser, **pauses for your approval before anything consequential**, and
+reports success only after code checks the real page against completion criteria. See
+[CLAUDE.md](CLAUDE.md) for the design rules.
+
+- **Verified, not claimed.** A task is `completed` only when its criteria hold on the final page.
+  No criteria means it ends `unverified`, never as a success.
+- **Approval for consequential actions** (sending, publishing, deleting, buying), enforced in code,
+  tied to the exact element and page you are shown.
+- **Sandboxed browser.** Chromium runs in a locked-down container whose only exit is a proxy that
+  refuses private addresses.
+- **Inspectable.** Every step, approval, verification result and screenshot is stored and shown in the dashboard.
+- **Optional Jev** (a fast decision model) can take plain click steps to cut Claude calls and cost.
+
+Status: early, built for one person (or a few) running it themselves. Read [Known limits](#known-limits) first.
 
 ## Run it locally
 
+### You need
+
+- **Node.js 22.12+** and **pnpm** (`corepack enable` gives you pnpm)
+- **Docker** (Postgres and the browser sandbox run in containers; the first build pulls a ~3.5 GB image)
+- **A Claude login**: [Claude Code](https://code.claude.com) installed and signed in (`claude auth login`).
+  Corbits uses that login by default, so no API key is needed. To use an API key instead, set
+  `CORBITS_MODEL_PROVIDER=api` and `ANTHROPIC_API_KEY` in `.env`.
+
+### Start it
+
 ```bash
+git clone https://github.com/jin-codes/corbits-public.git
+cd corbits-public
 pnpm install
-npx playwright install chromium
-claude auth login               # once: Corbits uses your Claude Code login, no API key
-cp .env.example .env            # then fill in CORBITS_API_TOKENS and CORBITS_BROWSER_WS_SECRET
-pnpm docker:up                  # Postgres + the browser sandbox (see below)
-pnpm start                      # API + queue worker on http://127.0.0.1:8787
+cp .env.example .env
 ```
 
-`pnpm test` runs the deterministic suite (needs the Postgres container). `pnpm test:live` runs
-the tests that call the real Claude API and cost a few cents.
+Fill in three values in `.env` (each command prints a value; paste it after the `=`):
+
+```bash
+# CORBITS_API_TOKENS  -> your sign-in token, as owner:token
+node -e "console.log('me:'+require('crypto').randomBytes(32).toString('hex'))"
+# CORBITS_SECRETS_KEY -> encrypts saved logins; back it up
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# CORBITS_BROWSER_WS_SECRET -> guards the browser sandbox
+node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
+```
+
+Then:
+
+```bash
+pnpm docker:up      # Postgres + the sandboxed browser (first run builds images, a few minutes)
+pnpm start          # the API, dashboard and worker on http://127.0.0.1:8787
+```
+
+Open <http://127.0.0.1:8787/> and sign in with the part of `CORBITS_API_TOKENS` **after** `me:`.
+
+### Try a first task
+
+In the dashboard, submit:
+
+- **Goal:** `Open https://example.com and tell me, in one sentence, what the page says this domain is for.`
+- **Completion criteria:** page text contains `documentation examples`
+
+You should see it open the page, then `Completed and verified`. Change the criterion to something the
+page does not contain and the same run ends `Failed`, even though the agent says it is done: that is the point.
+
+The same thing over the API:
+
+```bash
+TOKEN=...   # the part of CORBITS_API_TOKENS after "me:"
+curl -s -X POST http://127.0.0.1:8787/tasks \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"goal":"Open https://example.com and tell me what this domain is for.",
+       "completionCriteria":[{"kind":"text_present","value":"documentation examples"}]}'
+```
+
+Tip: put a phrase in quotes in the goal (`... find "Pro plan"`) and, with no criteria given, Corbits
+requires that phrase to be on the final page.
+
+### Stop and clean up
+
+```bash
+pnpm docker:down            # stop the containers (your data stays in the Postgres volume)
+docker compose down -v      # also delete the database volume: all tasks and saved logins are lost
+```
+
+### If something goes wrong
+
+| Symptom | Likely cause |
+|---|---|
+| `set CORBITS_BROWSER_WS_SECRET in .env` when running `pnpm docker:up` | The secret in `.env` is empty. |
+| Port already in use (5432, 9222, 8787) | Another Postgres or Corbits is running. Stop it, or change `PORT` and `CORBITS_BROWSER_PORT` in `.env` (the Postgres port is in `docker-compose.yml`). |
+| Tasks fail at once with a model error | Claude Code is not signed in (`claude auth login`), or use an API key as above. |
+| `Invalid configuration` at start | `.env` is missing a value or a token is shorter than 32 characters; the message names it. |
+| Task ends `Failed` although the page looks right | The criteria are checked against the page's accessibility tree, which can differ from what you see (for example a heading that exists only in `<title>`). Open the task to read what the verifier saw. |
+
+`pnpm test` runs the deterministic suite (needs the Postgres container). `pnpm test:live` runs the
+tests that call the real Claude API and cost a few cents. `npx playwright install chromium` is only
+needed if you run without the sandbox (no `CORBITS_BROWSER_WS_SECRET`), which is for development only.
 
 ## Running on a server
 
