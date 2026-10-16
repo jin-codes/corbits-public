@@ -501,10 +501,10 @@ Not built yet, in rough priority order:
 
 1. Smoother streaming than screenshot polling, and takeover while an approval is pending.
 2. One container per task instead of one shared Chromium, for stronger isolation.
-3. Jev-assisted decisions behind the model-adapter boundary, with the A/B/C evaluation from CLAUDE.md.
+3. Measure Jev-first and Jev-only more thoroughly (repeated `pnpm eval` runs, with a wider set of cases) before relying on them.
 4. Desktop (non-browser) execution behind a `DesktopAdapter`.
 5. Credential key rotation, a way to hand the agent one-time codes safely, and refreshing a saved login automatically when a site renews it.
-6. Stronger multi-user hardening: built-in HTTPS, self-service sign-up and token reset, per-user model keys, request rate limits.
+6. Stronger multi-user hardening: built-in HTTPS, self-service sign-up and token reset, request rate limits.
 
 ## Known limits
 
