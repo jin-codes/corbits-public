@@ -510,3 +510,8 @@ Not built yet, in rough priority order:
 - Browser sessions live in the worker process. After a restart the last page is reloaded, but typed
   form state is lost and the model must take a fresh snapshot.
 - Verification evidence is page-controlled text.
+
+## License
+
+[MIT](LICENSE). Corbits drives a real browser on your behalf: read [Known limits](#known-limits) and the
+safety notes above before pointing it at accounts you care about. It comes with no warranty.
