@@ -1,0 +1,41 @@
+{
+  "name": "corbits",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:up": "docker compose up -d postgres",
+    "eval": "tsx src/eval/run.ts",
+    "test:live": "vitest run --config vitest.live.config.ts",
+    "start": "tsx src/main.ts",
+    "dev": "tsx watch src/main.ts",
+    "chrome": "./scripts/chrome.sh",
+    "menubar": "./scripts/menubar.sh",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "test:docker": "vitest run --config vitest.docker.config.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "fastify": "^5.12.5",
+    "nodemailer": "^10.0.14",
+    "pg": "^8.23.1",
+    "pg-boss": "^12.36.0",
+    "playwright": "^1.63.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pg": "^8.23.1",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

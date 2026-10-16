@@ -1,0 +1,74 @@
+# Postgres for local development, plus the sandbox for browser tasks.
+#
+#   browser  Chromium with no direct network access, no host mounts, non-root, read-only root
+#            filesystem, all capabilities dropped, seccomp profile, memory/process limits.
+#   gateway  The browser's only exit: an egress proxy that refuses private networks (including
+#            this machine, other containers, and cloud metadata), plus a relay so the app can
+#            reach the browser's control socket on 127.0.0.1.
+#
+# Start with `pnpm docker:up`. Needs CORBITS_BROWSER_WS_SECRET in .env.
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: corbits
+      POSTGRES_PASSWORD: corbits_dev_only
+      POSTGRES_DB: corbits
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  browser:
+    build: ./docker/browser
+    init: true
+    restart: unless-stopped
+    networks: [sandbox]
+    environment:
+      BROWSER_WS_PATH: ${CORBITS_BROWSER_WS_SECRET:?set CORBITS_BROWSER_WS_SECRET in .env (24+ random characters)}
+      EGRESS_PROXY: http://gateway:3128
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m
+      - /home/pwuser:size=256m,uid=1001,gid=1001
+    cap_drop: [ALL]
+    # Chromium's own sandbox chroots into an empty directory; that is the single capability it needs
+    # (verified: it fails without it and starts with it).
+    cap_add: [SYS_CHROOT]
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./docker/seccomp_profile.json
+    shm_size: 1gb
+    mem_limit: 3g
+    pids_limit: 1024
+    cpus: 2
+
+  gateway:
+    build:
+      context: .
+      dockerfile: docker/gateway/Dockerfile
+    init: true
+    restart: unless-stopped
+    depends_on: [browser]
+    networks: [sandbox, edge]
+    ports:
+      - "127.0.0.1:${CORBITS_BROWSER_PORT:-9222}:9222"
+    environment:
+      RELAY_TARGET: browser:3000
+      EGRESS_ALLOW_PRIVATE_NETWORK: "false"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    pids_limit: 128
+
+networks:
+  # No route to the outside world: the browser can only talk to the gateway.
+  sandbox:
+    internal: true
+  edge: {}
+
+volumes:
+  pgdata:

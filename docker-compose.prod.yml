@@ -1,0 +1,45 @@
+# Production overlay: the whole stack on one server (for example Oracle Cloud Always Free, arm64).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Differences from the development file: the app runs in a container, Postgres uses a real password
+# and is not published on the host, the browser relay is not published on the host, and the app is
+# published on 127.0.0.1 only (reach it over Tailscale; see docs/deploy-oracle.md).
+# Needs POSTGRES_PASSWORD in .env in addition to the usual settings.
+
+services:
+  postgres:
+    restart: unless-stopped
+    ports: !reset []
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+
+  gateway:
+    ports: !reset []
+
+  app:
+    build: .
+    init: true
+    restart: unless-stopped
+    depends_on: [postgres, gateway]
+    # `default` reaches Postgres; `edge` reaches the gateway (and the internet for Claude and SMTP).
+    # The app is never on the browser's `sandbox` network.
+    networks: [default, edge]
+    ports:
+      - "127.0.0.1:${CORBITS_APP_PORT:-8787}:8787"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://corbits:${POSTGRES_PASSWORD}@postgres:5432/corbits
+      HOST: 0.0.0.0
+      PORT: "8787"
+      CORBITS_BROWSER_HOST: gateway
+      CORBITS_BROWSER_PORT: "9222"
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m
+      - /home/node:size=128m,uid=1000,gid=1000
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    pids_limit: 512
