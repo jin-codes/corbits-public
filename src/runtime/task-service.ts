@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ApprovalService, NotAuthorizedError } from "../approvals/approval-service.js";
 import { InvalidTransitionError } from "../domain/task-state.js";
+import { StandingApprovalsSchema } from "../policy/standing-approvals.js";
 import { ApprovalNotFoundError, ApprovalNotPendingError, type Approval, type ApprovalStore } from "../persistence/approval-store.js";
 import type { OneTimeSecretStore } from "../vault/one-time.js";
 import { InvalidSecretError, normalizeOrigin, validateName, type SecretStore } from "../vault/secret-store.js";
@@ -74,6 +75,8 @@ export const CreateTaskRequestSchema = z
     document: z.object({ title: z.string().trim().min(1).max(300), markdown: z.string().trim().min(1).max(100_000) }).strict().optional(),
     /** "chrome": run in a new tab of the owner's own Chrome (admins only, when the server has it). Omitted = the default browser. */
     browser: z.enum(["sandbox", "chrome"]).optional(),
+    /** The owner's advance permission for a few exact clicks on one site (admins only; see policy/standing-approvals.ts). Not carried over to a continued task. */
+    standingApprovals: StandingApprovalsSchema.optional(),
   })
   .strict();
 export type CreateTaskRequest = z.infer<typeof CreateTaskRequestSchema>;
@@ -264,7 +267,7 @@ export class TaskService {
     const task = await this.d.store.createTask({
       owner,
       goal: input.goal,
-      constraints: { limits, ...(logins.length ? { logins } : {}), ...(input.jevMode ? { jevMode: input.jevMode } : {}), ...(input.browser === "chrome" ? { browser: "chrome" } : {}), ...(input.document ? { document: input.document } : {}), ...(opts.schedule ? { scheduleId: opts.schedule.id } : {}) },
+      constraints: { limits, ...(logins.length ? { logins } : {}), ...(input.jevMode ? { jevMode: input.jevMode } : {}), ...(input.browser === "chrome" ? { browser: "chrome" } : {}), ...(input.document ? { document: input.document } : {}), ...(input.standingApprovals ? { standingApprovals: input.standingApprovals } : {}), ...(opts.schedule ? { scheduleId: opts.schedule.id } : {}) },
       completionCriteria: input.completionCriteria ?? [],
     });
     if (opts.schedule) await this.d.store.appendEvent(task.id, "task.scheduled", { scheduleId: opts.schedule.id, name: opts.schedule.name });

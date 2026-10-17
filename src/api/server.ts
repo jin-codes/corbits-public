@@ -414,6 +414,8 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
         if (req.role !== "admin") return reply.code(403).send({ error: "forbidden" });
         if (!deps.ownChrome) throw new ConflictError("This server is not set up to use your own Chrome (CORBITS_BROWSER_CDP_URL)");
       }
+      // Advance permission to click consequential buttons without asking: only the owner (an admin token) may give it.
+      if (body.standingApprovals && req.role !== "admin") return reply.code(403).send({ error: "forbidden" });
       return reply.code(201).send(await deps.service.createTask(req.owner, body));
     });
 

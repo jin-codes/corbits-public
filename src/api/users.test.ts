@@ -342,6 +342,23 @@ describe("bring your own key", () => {
   });
 });
 
+describe("standing approvals", () => {
+  const grants = [{ tool: "browser.click", origin: "https://blog.example.com", names: ["Publish now"] }];
+
+  it("may be given by an admin token only, are stored on the task, and must be well formed", async () => {
+    const { post, addUser, n, store } = rig();
+    const { token } = await addUser({ name: n("dave"), email: "dave@example.com" });
+    expect((await post(token, "/tasks", { goal: "x", standingApprovals: grants })).statusCode).toBe(403);
+
+    const made = await post(ADMIN, "/tasks", { goal: "x", standingApprovals: grants });
+    expect(made.statusCode).toBe(201);
+    expect((await store.getTask(made.json().id)).constraints.standingApprovals).toEqual(grants);
+
+    expect((await post(ADMIN, "/tasks", { goal: "x", standingApprovals: [{ ...grants[0], origin: "http://blog.example.com" }] })).statusCode).toBe(400);
+    expect((await post(ADMIN, "/tasks", { goal: "x", standingApprovals: [{ ...grants[0], anyOrigin: true }] })).statusCode).toBe(400);
+  });
+});
+
 describe("running a task in your own Chrome", () => {
   it("is offered to admins only: they may pick it, other people are refused, and /me shows it to admins alone", async () => {
     const { app, post, addUser, n, store } = rig({ ownChrome: true });

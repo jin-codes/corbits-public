@@ -182,6 +182,46 @@ describe("task pipeline: API service -> pg-boss -> worker -> orchestrator", () =
     expect(rig.browsers[0]!.effects).toEqual(["message-sent"]);
   });
 
+  describe("standing approval", () => {
+    const send = (req: StepRequest) =>
+      !done(req, "browser.goto") ? call("browser.goto", { url: HOME }) : done(req, "browser.click") ? finish() : call("browser.click", { ref: "e2" });
+    const SENT = { completionCriteria: [{ kind: "text_present" as const, value: "Sent" }] };
+    const grant = (names: string[]) => ({ standingApprovals: [{ tool: "browser.click" as const, origin: "https://example.com", names }] });
+
+    it("lets the exact click the owner allowed run without waiting, and records it", async () => {
+      const rig = await startRig({ decide: send });
+      const t = await rig.service.createTask("standing-owner", { goal: "send it", ...SENT, ...grant(["Send message"]) });
+      await waitFor(statusIs(rig, t.id, "completed"));
+      expect(rig.browsers[0]!.effects).toEqual(["message-sent"]);
+      const auto = await rig.store.listEvents(t.id, { types: ["approval.auto_approved"] });
+      expect(auto).toHaveLength(1);
+      expect(auto[0]!.payload).toMatchObject({ control: "Send message", origin: "https://example.com", tool: "browser.click" });
+      expect(await rig.service.listPendingApprovals("standing-owner")).toEqual([]);
+      const approval = await rig.approvals.get(String(auto[0]!.payload.approvalId));
+      expect(approval).toMatchObject({ status: "approved", decidedBy: "standing:https://example.com" });
+      expect(approval.consumedAt).not.toBeNull(); // used once, like any approval
+    });
+
+    it("still waits for a person when the control is not on the list", async () => {
+      const rig = await startRig({ decide: send });
+      const t = await rig.service.createTask("standing-owner-b", { goal: "send it", ...SENT, ...grant(["Continue"]) });
+      await waitFor(statusIs(rig, t.id, "awaiting_approval"));
+      expect(rig.browsers[0]!.effects).toEqual([]);
+      expect(await rig.store.listEvents(t.id, { types: ["approval.auto_approved"] })).toHaveLength(0);
+    });
+
+    it("still waits for a person when the grant is for another site", async () => {
+      const rig = await startRig({ decide: send });
+      const t = await rig.service.createTask("standing-owner-c", {
+        goal: "send it",
+        ...SENT,
+        standingApprovals: [{ tool: "browser.click", origin: "https://other.example.org", names: ["Send message"] }],
+      });
+      await waitFor(statusIs(rig, t.id, "awaiting_approval"));
+      expect(rig.browsers[0]!.effects).toEqual([]);
+    });
+  });
+
   it("emails the owner about the approval request and the verified completion, once each", async () => {
     const send = (req: StepRequest) =>
       !done(req, "browser.goto") ? call("browser.goto", { url: HOME }) : done(req, "browser.click") ? finish() : call("browser.click", { ref: "e2" });

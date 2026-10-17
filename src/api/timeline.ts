@@ -174,6 +174,13 @@ export function buildTimeline(events: readonly TaskEvent[], existingArtifacts?: 
         break;
       }
 
+      case "approval.auto_approved":
+        add("warn", t("timeline.autoApproved", { control: clip(str(p.control), 60) }), [
+          t("timeline.autoApprovedBy", { origin: clip(str(p.origin), 120) }),
+          describeCall(str(p.tool), p.input, undefined, t),
+        ]);
+        break;
+
       case "approval.decided":
         add(p.decision === "approved" ? "good" : "neutral", p.decision === "approved" ? t("timeline.approved") : t("timeline.rejected"), [
           describeCall(str(p.tool), p.input, p.target, t),

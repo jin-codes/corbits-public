@@ -12,7 +12,8 @@ import {
   type TaskEvent,
   type TaskStore,
 } from "../persistence/task-store.js";
-import type { Limits, PolicyEngine } from "../policy/policy-engine.js";
+import type { Decision, Limits, PolicyEngine } from "../policy/policy-engine.js";
+import { MAX_AUTO_APPROVALS, matchStandingApproval, standingApprovalsOf } from "../policy/standing-approvals.js";
 import { executeAllowed } from "../tools/executor.js";
 import type { ToolRegistry } from "../tools/registry.js";
 import { CriteriaSchema, type Criterion } from "../verification/criteria.js";
@@ -237,6 +238,48 @@ export class Orchestrator {
   }
 
   /**
+   * Approves, on the owner's standing grant, a held click that matches it exactly, and carries it out.
+   * Returns what carrying it out returned, or null (and does nothing) when there is no grant, no match, the cap
+   * is reached, or the same action was already requested before (then a person decides, as usual).
+   */
+  private async tryStandingApproval(
+    id: string,
+    signal: AbortSignal,
+    decision: Extract<Decision, { kind: "require_approval" }>,
+    inspection: Record<string, unknown> | undefined,
+    actionContext: unknown,
+  ): Promise<"continue" | "stop" | null> {
+    const task = await this.d.store.getTask(id);
+    const grants = standingApprovalsOf(task.constraints);
+    if (grants.length === 0) return null;
+    const page = (actionContext as { url?: unknown } | null)?.url;
+    const hit = matchStandingApproval(grants, decision.tool.name, inspection, page);
+    if (!hit) return null;
+    const used = (await this.d.store.listEvents(id, { types: ["approval.auto_approved"] })).length;
+    if (used >= MAX_AUTO_APPROVALS) return null;
+
+    const { approval, created } = await this.d.approvals.request(id, {
+      tool: decision.tool.name,
+      input: decision.input,
+      context: { page: actionContext, target: inspection ?? null },
+      actionFingerprint: decision.actionFingerprint,
+      effectFingerprint: decision.effectFingerprint,
+      consequentialKind: decision.consequentialKind,
+    });
+    if (!created) return null;
+    await this.d.approvals.decide(approval.id, "approved", `standing:${hit.origin}`);
+    await this.d.store.appendEvent(id, "approval.auto_approved", {
+      approvalId: approval.id,
+      tool: decision.tool.name,
+      input: decision.input,
+      control: hit.name,
+      origin: hit.origin,
+      grantedBy: "owner (standing approval on this task)",
+    });
+    return this.handleProposed(id, signal, decision.tool.name, decision.input, approval.id);
+  }
+
+  /**
    * Carries out one proposed action under the policy engine: denies it, asks for approval, or runs it.
    * `replayOf` is set when the proposal comes from an approval the user already gave (see runLoop).
    */
@@ -277,6 +320,12 @@ export class Orchestrator {
     }
 
     if (decision.kind === "require_approval") {
+      // The owner may have given advance permission for this exact click (see policy/standing-approvals.ts).
+      // The approval is still requested, decided and consumed like any other, so it is on the record.
+      if (!replayOf) {
+        const auto = await this.tryStandingApproval(id, signal, decision, inspection, actionContext);
+        if (auto) return auto;
+      }
       const { approval } = await this.d.approvals.request(id, {
         tool: decision.tool.name,
         input: decision.input,
