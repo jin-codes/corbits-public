@@ -1,3 +1,17 @@
+> ## ⏸ Announcement cancelled — not released yet
+>
+> The public announcement of Corbits has been **cancelled for now**. This repository is an early snapshot of
+> the first (server/Docker) version and is **not a supported release**; it may change or be taken down.
+>
+> **Where the project is heading** (see <https://corbits.vercel.app>, currently a "coming soon" page):
+> Corbits is becoming **an AI agent app for your own Mac** that turns goals into completed, *verified*
+> outcomes: a task counts as done only when the result is checked against evidence, anything consequential
+> waits for your approval, and it runs locally, with a small on-device model taking most step decisions
+> and Claude only the steps handed over (and no Claude calls at all when offline).
+>
+> The Docker/Postgres/server setup described below is the **legacy implementation** being replaced, not
+> extended. The Mac app itself is not built yet. Please do not rely on this repository.
+
 # Corbits
 
 **English** | [한국어](README.ko.md)
